@@ -81,7 +81,6 @@ streamlit run 5aside-streamlit.py
 - **Streamlit Integration:**
   - Provides text areas for player input and team number selection.
   - Displays team assignments in a table format.
-  - Includes a "Download Teams as Excel" button to save results.
 
 ---
 
