@@ -3,7 +3,6 @@ import math
 import random
 from collections import defaultdict
 import streamlit as st
-from io import BytesIO
 
 ####################################################
 ######### SETUP
@@ -82,17 +81,6 @@ def create_balanced_teams(players, num_teams):
 
     return teams
 
-# Function to save teams to an Excel file
-def save_teams_to_excel(teams):
-    """Saves the teams to an Excel file and returns the file-like object."""
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        for team_idx, members in teams.items():
-            df = pd.DataFrame(members, columns=['Name', 'Position'])
-            df.to_excel(writer, sheet_name=f'Team_{team_idx}', index=False)
-    output.seek(0)
-    return output
-
 ####################################################
 ######### STREAMLIT APP
 ####################################################
@@ -139,14 +127,5 @@ if input_data:
                 st.subheader(f"Team {team_idx}")
                 df = pd.DataFrame(members, columns=['Name', 'Position'])
                 st.dataframe(df, use_container_width=True)
-
-            # Save to Excel and provide download button
-            excel_data = save_teams_to_excel(teams)
-            st.download_button(
-                label="Download Teams as Excel",
-                data=excel_data,
-                file_name="teams_output.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
         except Exception as e:
             st.error(f"An error occurred: {e}")
