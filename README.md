@@ -77,8 +77,6 @@ streamlit run 5aside-streamlit.py
      - Balances teams based on predefined position ratios.
      - Distributes any leftover players evenly.
 
-  3. **save_teams_to_excel:**
-     - Exports the team assignments into an Excel file for download.
 
 - **Streamlit Integration:**
   - Provides text areas for player input and team number selection.
