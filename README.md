@@ -34,7 +34,7 @@ pip install pandas streamlit
 3. Run the Streamlit app:
 
 ```bash
-streamlit run app.py
+streamlit run 5aside-streamlit.py
 ```
 
 ---
