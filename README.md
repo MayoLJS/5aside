@@ -17,7 +17,7 @@ This Python-based application is designed to help users create balanced five-a-s
   - Input player data in the format `Name - Position` (e.g., `Tony - ATT`).
   - Specify the desired number of teams.
   - View the generated teams directly in the app.
-  - Export team assignments as an Excel file.
+
 
 ---
 
