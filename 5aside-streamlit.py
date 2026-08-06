@@ -195,11 +195,14 @@ if 'roster' not in st.session_state:
     parsed_defaults, _ = parse_player_input(raw_default_roster)
     df = pd.DataFrame(parsed_defaults)
     df["Available ✅"] = False 
+    
+    # Reorder the dataframe columns explicitly so the tick box is always first
+    df = df[["Available ✅", "Name", "Position", "Skill"]]
     st.session_state.roster = df
 
 def clear_roster():
-    # Provide one empty row when cleared and safely delete the editor's memory key
-    st.session_state.roster = pd.DataFrame([{"Name": "", "Position": None, "Skill": 3, "Available ✅": False}])
+    # Provide one empty row explicitly ordered
+    st.session_state.roster = pd.DataFrame([{"Available ✅": False, "Name": "", "Position": None, "Skill": 3}])
     if 'roster_editor' in st.session_state:
         del st.session_state['roster_editor']
 
@@ -220,11 +223,11 @@ with st.sidebar:
     **Improvements made from the start:**
     1. **SaaS Dashboard UI:** Responsive card layouts.
     2. **Persistent Database:** 64-player roster defaults to unticked. 
-    3. **No Table Jumping:** Fixed the UI bug so you can rapid-click checkboxes.
-    4. **Strict 5-Player Cap:** Teams are now mathematically hard-capped at 5 players.
-    5. **Auto-Waitlisting:** Any extra selected players automatically spill over into a new, balanced incomplete team.
-    6. **Skill-Weighted Balancing:** 1-4 custom rating snake draft.
-    7. **Mobile Sequential Stacking:** UI perfectly stacks teams in order 1,2,3,4 on phones.
+    3. **Left-Aligned Ticks:** Moved the availability checkboxes to the far left for easier mobile scanning.
+    4. **No Table Jumping:** Fixed the UI bug so you can rapid-click checkboxes.
+    5. **Strict 5-Player Cap:** Teams are now mathematically hard-capped at 5 players.
+    6. **Auto-Waitlisting:** Extra players spill over into a new, balanced incomplete team.
+    7. **Skill-Weighted Balancing:** 1-4 custom rating snake draft.
     8. **CSV Export:** Download timestamped results instantly.
     """)
 
@@ -256,6 +259,8 @@ with st.container(border=True):
                 hide_index=True,
                 use_container_width=True,
                 height=500,
+                # Explicitly force Streamlit to render the checkbox on the far left
+                column_order=["Available ✅", "Name", "Position", "Skill"], 
                 column_config={
                     "Available ✅": st.column_config.CheckboxColumn("Available ✅", default=False),
                     "Name": st.column_config.TextColumn("Player Name", required=True, max_chars=50),
@@ -318,7 +323,6 @@ if generate_btn:
             st.markdown("---")
             
             try:
-                # Backend logic no longer needs num_teams passed manually!
                 teams = create_balanced_teams(players)
                 
                 st.markdown("### 🏆 Your Balanced Squads")
