@@ -1,5 +1,6 @@
 import pandas as pd
 import math
+import random
 from collections import defaultdict
 import streamlit as st
 from datetime import datetime
@@ -69,7 +70,12 @@ def create_balanced_teams(players):
     MAX_TEAM_SIZE = 5
     total_players = len(players)
     
-    # Sort all players by Skill ASCENDING (1 is Best, 4 is Worst)
+    # --- THE RANDOMNESS FIX ---
+    # 1. Shuffle all players first to ensure variety within the same skill brackets
+    random.shuffle(players)
+    
+    # 2. Sort all players by Skill ASCENDING (1 is Best, 4 is Worst)
+    # Because Python sort is stable, players with the same skill remain randomly ordered!
     players = sorted(players, key=lambda x: x['Skill'], reverse=False)
     
     # Group by position
@@ -223,12 +229,11 @@ with st.sidebar:
     **Improvements made from the start:**
     1. **SaaS Dashboard UI:** Responsive card layouts.
     2. **Persistent Database:** 64-player roster defaults to unticked. 
-    3. **Left-Aligned Ticks:** Moved the availability checkboxes to the far left for easier mobile scanning.
-    4. **No Table Jumping:** Fixed the UI bug so you can rapid-click checkboxes.
-    5. **Strict 5-Player Cap:** Teams are now mathematically hard-capped at 5 players.
+    3. **Left-Aligned Ticks:** Checkboxes on the far left for easy mobile scanning.
+    4. **Stable Randomization:** Snake draft perfectly balances skills while giving you fresh team combos every click!
+    5. **Strict 5-Player Cap:** Teams are mathematically hard-capped at 5 players.
     6. **Auto-Waitlisting:** Extra players spill over into a new, balanced incomplete team.
-    7. **Skill-Weighted Balancing:** 1-4 custom rating snake draft.
-    8. **CSV Export:** Download timestamped results instantly.
+    7. **CSV Export:** Download timestamped results instantly.
     """)
 
 ####################################################
