@@ -88,7 +88,6 @@ def create_balanced_teams(players, num_teams):
         needed_per_team = math.floor(count / TOTAL_RATIO * team_size)
         
         for _ in range(needed_per_team):
-            # Snake draft: forwards 1 to N, then backwards N to 1
             team_order = list(range(1, num_teams + 1))
             for team_idx in team_order:
                 if pos_players:
@@ -129,16 +128,21 @@ with st.sidebar:
     except:
         pass
 
-    st.markdown("### 📋 Text Upload Guide")
+    st.markdown("### 🚀 Changelog & Evolution")
     st.info("""
-    If you are uploading a text file rather than using the interactive table, use the format:  
-    `Name - Position - Skill(1-5)`
-    
-    *Example:* `Tony - ATT - 5`
-    
-    **Accepted Positions:** 🏃‍♂️ **ATT** (Attacker)  
-    🎯 **MID** (Midfielder)  
-    🛡️ **DEF** (Defender)
+    **Here are all the improvements made from the start:**
+    1. **SaaS Dashboard UI:** Overhauled the top-down script into a card-based layout with responsive grid outputs.
+    2. **Interactive Data Editor:** Replaced raw text boxes with a spreadsheet table featuring dropdowns for positions (`ATT`, `MID`, `DEF`) and star ratings (`1-5 ⭐`).
+    3. **Skill-Weighted Balancing:** Integrated a continuous snake-draft algorithm that ensures teams match tightly on overall average skill and tactical ratios.
+    4. **Team Metrics & Summary:** Added live team player counts and average star ratings (`Avg Skill / 5.0`) to every generated squad card.
+    5. **12-Player Simulation Ready:** Pre-loaded the interactive table with 12 players so you can instantly simulate 2 balanced teams out-of-the-box.
+    """)
+
+    st.markdown("### 📋 Text Upload Guide")
+    st.markdown("""
+    Format: `Name - Position - Skill(1-5)`  
+    *Example:* `Tony - ATT - 5`  
+    **Positions:** `ATT`, `MID`, `DEF`
     """)
     
     try:
@@ -161,9 +165,9 @@ with st.container(border=True):
         input_method = st.radio("Choose Input Method:", ["Interactive Table", "File Upload"], horizontal=True)
         
         if input_method == "Interactive Table":
-            st.caption("Click the '+' to add players. Select positions and rate skills from the dropdowns.")
+            st.caption("Click '+' to add players. Pre-loaded with 12 players to simulate 2 balanced teams!")
             
-            # Create a default starting grid with realistic test data
+            # Default starting grid pre-loaded with 12 players
             default_roster = pd.DataFrame([
                 {"Name": "Tony", "Position": "ATT", "Skill": 4},
                 {"Name": "Mayo", "Position": "DEF", "Skill": 5},
@@ -174,37 +178,23 @@ with st.container(border=True):
                 {"Name": "Emma", "Position": "MID", "Skill": 5},
                 {"Name": "Chris", "Position": "ATT", "Skill": 2},
                 {"Name": "Luke", "Position": "DEF", "Skill": 4},
-                {"Name": "Sam", "Position": "MID", "Skill": 3}
+                {"Name": "Sam", "Position": "MID", "Skill": 3},
+                {"Name": "Marcus", "Position": "ATT", "Skill": 5},
+                {"Name": "Kieran", "Position": "DEF", "Skill": 4}
             ])
             
-            # Render the interactive editor with column constraints
             edited_df = st.data_editor(
                 default_roster,
                 num_rows="dynamic",
                 hide_index=True,
                 use_container_width=True,
                 column_config={
-                    "Name": st.column_config.TextColumn(
-                        "Player Name", 
-                        required=True, 
-                        max_chars=50
-                    ),
-                    "Position": st.column_config.SelectboxColumn(
-                        "Position",
-                        options=["ATT", "MID", "DEF"],
-                        required=True
-                    ),
-                    "Skill": st.column_config.NumberColumn(
-                        "Skill Level (1-5)",
-                        min_value=1,
-                        max_value=5,
-                        required=True,
-                        format="%d ⭐"
-                    )
+                    "Name": st.column_config.TextColumn("Player Name", required=True, max_chars=50),
+                    "Position": st.column_config.SelectboxColumn("Position", options=["ATT", "MID", "DEF"], required=True),
+                    "Skill": st.column_config.NumberColumn("Skill Level (1-5)", min_value=1, max_value=5, required=True, format="%d ⭐")
                 }
             )
             
-            # Extract valid players from the table
             input_data = "" 
             players = []
             for _, row in edited_df.iterrows():
@@ -247,19 +237,15 @@ if generate_btn:
             st.markdown("---")
             
             try:
-                # Run the backend logic
                 teams = create_balanced_teams(players, num_teams)
                 
                 st.markdown("### 🏆 Your Balanced Squads")
                 
-                # Determine columns based on team count (max 3 wide)
                 cols_per_row = min(len(teams), 3) 
                 grid_cols = st.columns(cols_per_row)
                 
                 for i, (team_idx, members) in enumerate(teams.items()):
                     target_col = grid_cols[i % cols_per_row]
-                    
-                    # Compute team average skill level
                     avg_skill = sum(m['Skill'] for m in members) / len(members) if members else 0
                     
                     with target_col:
