@@ -49,7 +49,7 @@ def parse_player_input(input_data):
             position = parts[1].strip().upper()
             skill = 3 # Default skill if not provided
             
-            # Allow for optional skill metric in text upload (e.g. Tony - ATT - 5)
+            # Allow for optional skill metric in text upload (e.g. Tony - ATT - 2)
             if len(parts) == 3:
                 try:
                     skill = int(parts[2].strip())
@@ -65,7 +65,7 @@ def parse_player_input(input_data):
     return players, errors
 
 def create_balanced_teams(players, num_teams):
-    """Creates teams balanced by both Position and Skill Rating, ensuring equal average skill levels."""
+    """Creates teams balanced by both Position and Skill Rating."""
     RATIO = {'ATT': 1, 'MID': 2, 'DEF': 2}
     TOTAL_RATIO = sum(RATIO.values())
     MAX_TEAM_SIZE = 5
@@ -76,8 +76,8 @@ def create_balanced_teams(players, num_teams):
     
     team_size = max(1, total_players // num_teams)
 
-    # Sort all players by Skill (descending) to ensure highest rated get drafted first
-    players = sorted(players, key=lambda x: x['Skill'], reverse=True)
+    # Sort all players by Skill ASCENDING (1 is Best, 4 is Worst)
+    players = sorted(players, key=lambda x: x['Skill'], reverse=False)
     players_by_position = {pos: [p for p in players if p['Position'] == pos] for pos in RATIO}
     
     teams = defaultdict(list)
@@ -98,10 +98,10 @@ def create_balanced_teams(players, num_teams):
     for pos_players in players_by_position.values():
         remaining_players.extend(pos_players)
 
-    # Sort remaining players globally by skill descending
-    remaining_players = sorted(remaining_players, key=lambda x: x['Skill'], reverse=True)
+    # Sort remaining players globally by skill ascending
+    remaining_players = sorted(remaining_players, key=lambda x: x['Skill'], reverse=False)
 
-    # 3. Distribute remaining players via a continuous snake draft to tightly match team skill averages
+    # 3. Distribute remaining players via a continuous snake draft
     team_idx = 1
     direction = 1
     for player in remaining_players:
@@ -115,6 +115,84 @@ def create_balanced_teams(players, num_teams):
             direction = 1
 
     return teams
+
+####################################################
+######### STATE MANAGEMENT (Default Roster)
+####################################################
+# Default 64 Player Roster Data
+raw_default_roster = """Ismail - DEF - 2
+Harry - MID - 2
+Ayobamidele - DEF - 1
+Bilal - DEF - 1
+Segun - DEF - 4
+Demo - ATT - 1
+Jide - MID - 3
+Big George - MID - 2
+Joe - ATT - 2
+King - DEF - 1
+Uncle T - DEF - 3
+Gbenga olusanya - MID - 2
+Cj - ATT - 1
+Msj - ATT - 4
+Gozern - MID - 2
+Hush - DEF - 2
+Comm Tony - ATT - 3
+Joboy - ATT - 1
+Capt adeoye - ATT - 1
+ Moh Afolabi - ATT - 1
+Barka b - DEF - 1
+Josh - DEF - 2
+Mohammed - ATT - 3
+Oscar - MID - 3
+Gbenga - ATT - 2
+Solaj - MID - 1
+Kenny - MID - 1
+Deolu - MID - 1
+Stevo - ATT - 3
+Dare - DEF - 4
+Dave - ATT - 3
+Dubem - DEF - 2
+Hammed - DEF - 2
+Stain - MID - 3
+Supa - MID - 2
+Dr Toyin - DEF - 4
+Wisdom - DEF - 2
+Timi - MID - 4
+Eddy - DEF - 2
+George - MID - 2
+Victor - DEF - 1
+Emperor - DEF - 3
+Micheal Tblack - DEF - 2
+Obi - MID - 2
+Ola - MID - 2
+Moe - DEF - 3
+Dolat - DEF - 2
+Shaffi - ATT - 3
+Fola - DEF - 3
+Lummy - ATT - 1
+David - DEF - 4
+Mr promise - DEF - 2
+Hydaar - DEF - 2
+Emmanuel - ATT - 1
+FBI - MID - 2
+Azodo - DEF - 2
+Omar - MID - 1
+KDB - DEF - 2
+Ay - MID - 1
+Nonso - DEF - 1
+Halim - DEF - 2
+Emy - DEF - 1
+Vini - ATT - 3
+Ezekiel - ATT - 4"""
+
+# Initialize session state so we can clear/refresh it dynamically
+if 'roster' not in st.session_state:
+    parsed_defaults, _ = parse_player_input(raw_default_roster)
+    st.session_state.roster = pd.DataFrame(parsed_defaults)
+
+def clear_roster():
+    # Provide one empty row when cleared
+    st.session_state.roster = pd.DataFrame([{"Name": "", "Position": None, "Skill": 3}])
 
 ####################################################
 ######### SIDEBAR & INSTRUCTIONS
@@ -132,16 +210,16 @@ with st.sidebar:
     st.info("""
     **Here are all the improvements made from the start:**
     1. **SaaS Dashboard UI:** Overhauled the top-down script into a card-based layout with responsive grid outputs.
-    2. **Interactive Data Editor:** Replaced raw text boxes with a spreadsheet table featuring dropdowns for positions (`ATT`, `MID`, `DEF`) and star ratings (`1-5 ⭐`).
-    3. **Skill-Weighted Balancing:** Integrated a continuous snake-draft algorithm that ensures teams match tightly on overall average skill and tactical ratios.
-    4. **Team Metrics & Summary:** Added live team player counts and average star ratings (`Avg Skill / 5.0`) to every generated squad card.
-    5. **12-Player Simulation Ready:** Pre-loaded the interactive table with 12 players so you can instantly simulate 2 balanced teams out-of-the-box.
+    2. **Interactive Data Editor:** Replaced raw text boxes with a spreadsheet table featuring dropdowns for positions (`ATT`, `MID`, `DEF`).
+    3. **Skill-Weighted Balancing:** Integrated a snake-draft algorithm that matches your custom 1-4 rating system (`1 = Good, 4 = Ok`).
+    4. **Blind Output:** Player ratings are strictly used for backend calculations and safely hidden from the final visual outputs.
+    5. **Dynamic Roster Management:** Added your custom 64-player roster out of the box, with a fast 'Clear' button. Refreshing restores the 64 defaults.
     """)
 
     st.markdown("### 📋 Text Upload Guide")
     st.markdown("""
-    Format: `Name - Position - Skill(1-5)`  
-    *Example:* `Tony - ATT - 5`  
+    Format: `Name - Position - Skill(1-4)`  
+    *Example:* `Tony - ATT - 2`  
     **Positions:** `ATT`, `MID`, `DEF`
     """)
     
@@ -162,36 +240,26 @@ with st.container(border=True):
     
     with col1:
         st.markdown("### 📝 Player Roster")
-        input_method = st.radio("Choose Input Method:", ["Interactive Table", "File Upload"], horizontal=True)
+        input_method = st.radio("Choose Input Method:", ["Interactive Table", "File Upload"], horizontal=True, label_visibility="collapsed")
         
         if input_method == "Interactive Table":
-            st.caption("Click '+' to add players. Pre-loaded with 12 players to simulate 2 balanced teams!")
-            
-            # Default starting grid pre-loaded with 12 players
-            default_roster = pd.DataFrame([
-                {"Name": "Tony", "Position": "ATT", "Skill": 4},
-                {"Name": "Mayo", "Position": "DEF", "Skill": 5},
-                {"Name": "Sarah", "Position": "MID", "Skill": 3},
-                {"Name": "Alex", "Position": "ATT", "Skill": 3},
-                {"Name": "David", "Position": "MID", "Skill": 4},
-                {"Name": "John", "Position": "DEF", "Skill": 2},
-                {"Name": "Emma", "Position": "MID", "Skill": 5},
-                {"Name": "Chris", "Position": "ATT", "Skill": 2},
-                {"Name": "Luke", "Position": "DEF", "Skill": 4},
-                {"Name": "Sam", "Position": "MID", "Skill": 3},
-                {"Name": "Marcus", "Position": "ATT", "Skill": 5},
-                {"Name": "Kieran", "Position": "DEF", "Skill": 4}
-            ])
+            # Action Header for Table
+            table_head_1, table_head_2 = st.columns([3, 1])
+            with table_head_1:
+                st.caption("Pre-loaded with 64 players! Click '+' to add more or clear to start over.")
+            with table_head_2:
+                st.button("🗑️ Clear Roster", on_click=clear_roster, use_container_width=True)
             
             edited_df = st.data_editor(
-                default_roster,
+                st.session_state.roster,
                 num_rows="dynamic",
                 hide_index=True,
                 use_container_width=True,
+                height=350,
                 column_config={
                     "Name": st.column_config.TextColumn("Player Name", required=True, max_chars=50),
                     "Position": st.column_config.SelectboxColumn("Position", options=["ATT", "MID", "DEF"], required=True),
-                    "Skill": st.column_config.NumberColumn("Skill Level (1-5)", min_value=1, max_value=5, required=True, format="%d ⭐")
+                    "Skill": st.column_config.NumberColumn("Rank (1=Good, 4=Ok)", min_value=1, max_value=4, required=True, format="%d")
                 }
             )
             
@@ -218,7 +286,7 @@ with st.container(border=True):
 
     with col2:
         st.markdown("### ⚙️ Constraints")
-        num_teams = st.number_input("Number of Teams:", min_value=1, max_value=20, value=2, step=1)
+        num_teams = st.number_input("Number of Teams:", min_value=1, max_value=20, value=12, step=1)
         
         st.markdown("<br>", unsafe_allow_html=True)
         generate_btn = st.button("🚀 Generate Teams", type="primary", use_container_width=True)
@@ -246,14 +314,14 @@ if generate_btn:
                 
                 for i, (team_idx, members) in enumerate(teams.items()):
                     target_col = grid_cols[i % cols_per_row]
-                    avg_skill = sum(m['Skill'] for m in members) / len(members) if members else 0
                     
                     with target_col:
                         with st.container(border=True):
                             st.markdown(f"<h4 style='text-align: center;'>Team {team_idx}</h4>", unsafe_allow_html=True)
-                            st.caption(f"👥 Players: {len(members)} | ⭐ Avg Skill: {avg_skill:.2f} / 5.0")
+                            st.caption(f"👥 Players: {len(members)}")
                             
-                            df = pd.DataFrame(members)
+                            # Create DataFrame and instantly drop the Skill column so it stays hidden
+                            df = pd.DataFrame(members)[['Name', 'Position']]
                             
                             st.dataframe(
                                 df,
@@ -261,8 +329,7 @@ if generate_btn:
                                 hide_index=True,
                                 column_config={
                                     "Name": st.column_config.TextColumn("Player"),
-                                    "Position": st.column_config.TextColumn("Pos"),
-                                    "Skill": st.column_config.NumberColumn("Skill", format="%d ⭐")
+                                    "Position": st.column_config.TextColumn("Pos")
                                 }
                             )
             except Exception as e:
