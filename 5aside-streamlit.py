@@ -43,14 +43,13 @@ def parse_player_input(input_data):
     lines = input_data.splitlines()
     for line in lines:
         if not line.strip():
-            continue # Skip empty lines
+            continue 
         parts = line.split('-')
         if len(parts) >= 2:
             name = parts[0].strip()
             position = parts[1].strip().upper()
-            skill = 3 # Default skill if not provided
+            skill = 3 
             
-            # Allow for optional skill metric in text upload (e.g. Tony - ATT - 2)
             if len(parts) == 3:
                 try:
                     skill = int(parts[2].strip())
@@ -74,7 +73,6 @@ def create_balanced_teams(players, num_teams):
     if num_teams < 1:
         num_teams = 1
     
-    # Team size logic (max 5 players mathematically guaranteed by UI validation)
     team_size = max(1, total_players // num_teams)
 
     # Sort all players by Skill ASCENDING (1 is Best, 4 is Worst)
@@ -83,7 +81,7 @@ def create_balanced_teams(players, num_teams):
     
     teams = defaultdict(list)
 
-    # 1. Distribute based on position ratio using a snake draft partitioned by skill
+    # 1. Distribute based on position ratio using a snake draft
     for pos, count in RATIO.items():
         pos_players = players_by_position[pos]
         needed_per_team = math.floor(count / TOTAL_RATIO * team_size)
@@ -94,7 +92,7 @@ def create_balanced_teams(players, num_teams):
                 if pos_players:
                     teams[team_idx].append(pos_players.pop(0))
 
-    # 2. Collect remaining players who didn't fit the exact mathematical ratio
+    # 2. Collect remaining players 
     remaining_players = []
     for pos_players in players_by_position.values():
         remaining_players.extend(pos_players)
@@ -102,7 +100,7 @@ def create_balanced_teams(players, num_teams):
     # Sort remaining players globally by skill ascending
     remaining_players = sorted(remaining_players, key=lambda x: x['Skill'], reverse=False)
 
-    # 3. Distribute remaining players via a continuous snake draft
+    # 3. Distribute remaining players via continuous snake draft (Accommodates teams > 5 players)
     team_idx = 1
     direction = 1
     for player in remaining_players:
@@ -120,7 +118,6 @@ def create_balanced_teams(players, num_teams):
 ####################################################
 ######### STATE MANAGEMENT (Default Roster)
 ####################################################
-# Default 64 Player Roster Data
 raw_default_roster = """Ismail - DEF - 2
 Harry - MID - 2
 Ayobamidele - DEF - 1
@@ -190,7 +187,7 @@ Ezekiel - ATT - 4"""
 if 'roster' not in st.session_state:
     parsed_defaults, _ = parse_player_input(raw_default_roster)
     df = pd.DataFrame(parsed_defaults)
-    df["Available ✅"] = True # Add the availability column (Default all to true on load)
+    df["Available ✅"] = True 
     st.session_state.roster = df
 
 def clear_roster():
@@ -212,26 +209,15 @@ with st.sidebar:
     st.markdown("### 🚀 Changelog & Evolution")
     st.info("""
     **Improvements made from the start:**
-    1. **SaaS Dashboard UI:** Overhauled the top-down script into a card-based layout with responsive grids.
-    2. **Interactive Data Editor:** Spreadsheet table featuring dropdowns for positions (`ATT`, `MID`, `DEF`).
-    3. **Skill-Weighted Balancing:** Snake-draft algorithm matching a custom rating system (`1 = Good, 4 = Ok`).
-    4. **Blind Output:** Player ratings are strictly used for calculations and safely hidden from final outputs.
-    5. **CSV Export:** Dynamic timestamped download button to save generated teams.
-    6. **Persistent Roster Database:** Players stay in the database! Simply toggle the `Available ✅` checkbox week-to-week to select who is playing.
-    7. **Strict Squad Limits:** Algorithm safely enforces a strict maximum of 5 players per team.
+    1. **SaaS Dashboard UI:** Responsive card layouts.
+    2. **Interactive Editor:** Pre-loaded 64 player database. 
+    3. **Skill-Weighted Balancing:** 1-4 custom ranking draft.
+    4. **Blind Output:** Player ratings hidden from generated cards.
+    5. **Persistent Roster:** Toggle `Available ✅` week-to-week to select active players.
+    6. **Dynamic Team Sizing:** Automatically recommends number of teams based on available players (allows >5 per team for subs!).
+    7. **Mobile Sequential Stacking:** UI perfectly stacks teams in order 1,2,3,4 on phones.
+    8. **CSV Export:** Download timestamped results instantly.
     """)
-
-    st.markdown("### 📋 Text Upload Guide")
-    st.markdown("""
-    Format: `Name - Position - Skill(1-4)`  
-    *Example:* `Tony - ATT - 2`  
-    **Positions:** `ATT`, `MID`, `DEF`
-    """)
-    
-    try:
-        st.image('./img/Template.png', caption='Input Template', use_container_width=True)
-    except:
-        pass
 
 ####################################################
 ######### MAIN UI WORKSPACE
@@ -248,7 +234,6 @@ with st.container(border=True):
         input_method = st.radio("Choose Input Method:", ["Interactive Table", "File Upload"], horizontal=True, label_visibility="collapsed")
         
         if input_method == "Interactive Table":
-            # Action Header for Table
             table_head_1, table_head_2 = st.columns([3, 1])
             with table_head_1:
                 st.caption("Check 'Available ✅' for players showing up this week. Click '+' to add permanent new players!")
@@ -269,13 +254,11 @@ with st.container(border=True):
                 }
             )
             
-            # Sync user edits back to session state so they don't disappear on button click
             st.session_state.roster = edited_df 
             
             input_data = "" 
             players = []
             for _, row in edited_df.iterrows():
-                # ONLY grab players who are ticked as Available
                 if pd.notna(row['Name']) and str(row['Name']).strip() != "" and pd.notna(row['Position']) and row.get('Available ✅', False):
                     players.append({
                         "Name": str(row['Name']).strip(),
@@ -296,21 +279,26 @@ with st.container(border=True):
 
     with col2:
         st.markdown("### ⚙️ Constraints")
-        num_teams = st.number_input("Number of Teams:", min_value=1, max_value=20, value=12, step=1)
+        
+        # --- DYNAMIC TEAM CALCULATION ---
+        # Calculate optimal teams (Floor of players / 5). Minimum of 2 teams if people are playing.
+        num_players = len(players)
+        optimal_teams = max(2, num_players // 5) if num_players >= 8 else (1 if num_players > 0 else 2)
+        
+        num_teams = st.number_input("Number of Teams:", min_value=1, max_value=20, value=optimal_teams, step=1)
         
         st.markdown("<br>", unsafe_allow_html=True)
         generate_btn = st.button("🚀 Generate Teams", type="primary", use_container_width=True)
 
-        st.info(f"**Max Capacity:** {num_teams * 5} Players\n\n*(5 players per team)*")
+        # Show projection info based on the dynamic calculation
+        if num_teams > 0 and num_players > 0:
+            avg_size = num_players / num_teams
+            st.info(f"**Selected Players:** {num_players}\n\n**Est. Team Size:** ~{math.floor(avg_size)} to {math.ceil(avg_size)} players per squad.")
 
 # --- PROCESSING & OUTPUT SECTION ---
 if generate_btn:
     if not players and not input_data.strip():
         st.warning("⚠️ Please select at least one available player.")
-    elif len(players) > (num_teams * 5):
-        # Strict 5-player constraint error block
-        excess = len(players) - (num_teams * 5)
-        st.error(f"🚨 **Too many players selected!**\n\nYou marked **{len(players)}** players as available, but **{num_teams}** teams can only hold a maximum of **{num_teams * 5}** players (5 per team). \n\n*Please increase your teams to at least {math.ceil(len(players)/5)} or uncheck {excess} players.*")
     else:
         if errors:
             st.error("🚨 Found errors in your roster:")
@@ -325,40 +313,42 @@ if generate_btn:
                 
                 st.markdown("### 🏆 Your Balanced Squads")
                 
-                cols_per_row = min(len(teams), 3) 
-                grid_cols = st.columns(cols_per_row)
+                # --- MOBILE SEQUENTIAL GRID FIX ---
+                # We render the grid row by row so that on mobile, it stacks exactly 1, 2, 3, 4 sequentially
+                cols_per_row = 3
+                team_items = list(teams.items())
                 
-                # List to hold data for the CSV export
                 export_data = []
                 
-                for i, (team_idx, members) in enumerate(teams.items()):
-                    target_col = grid_cols[i % cols_per_row]
+                # Iterate through teams in chunks of 3
+                for row_start in range(0, len(team_items), cols_per_row):
+                    row_cols = st.columns(cols_per_row)
+                    row_teams = team_items[row_start : row_start + cols_per_row]
                     
-                    with target_col:
-                        with st.container(border=True):
-                            st.markdown(f"<h4 style='text-align: center;'>Team {team_idx}</h4>", unsafe_allow_html=True)
-                            st.caption(f"👥 Players: {len(members)} / 5")
-                            
-                            # Create DataFrame and instantly drop the Skill column so it stays hidden
-                            df = pd.DataFrame(members)[['Name', 'Position']] if members else pd.DataFrame(columns=['Name', 'Position'])
-                            
-                            st.dataframe(
-                                df,
-                                use_container_width=True,
-                                hide_index=True,
-                                column_config={
-                                    "Name": st.column_config.TextColumn("Player"),
-                                    "Position": st.column_config.TextColumn("Pos")
-                                }
-                            )
-                            
-                            # Append to our export data
-                            for _, row in df.iterrows():
-                                export_data.append({
-                                    "Team": f"Team {team_idx}",
-                                    "Player": row["Name"],
-                                    "Position": row["Position"]
-                                })
+                    for col, (team_idx, members) in zip(row_cols, row_teams):
+                        with col:
+                            with st.container(border=True):
+                                st.markdown(f"<h4 style='text-align: center;'>Team {team_idx}</h4>", unsafe_allow_html=True)
+                                st.caption(f"👥 Players: {len(members)}")
+                                
+                                df = pd.DataFrame(members)[['Name', 'Position']] if members else pd.DataFrame(columns=['Name', 'Position'])
+                                
+                                st.dataframe(
+                                    df,
+                                    use_container_width=True,
+                                    hide_index=True,
+                                    column_config={
+                                        "Name": st.column_config.TextColumn("Player"),
+                                        "Position": st.column_config.TextColumn("Pos")
+                                    }
+                                )
+                                
+                                for _, row in df.iterrows():
+                                    export_data.append({
+                                        "Team": f"Team {team_idx}",
+                                        "Player": row["Name"],
+                                        "Position": row["Position"]
+                                    })
                 
                 st.markdown("---")
                 
@@ -367,7 +357,6 @@ if generate_btn:
                     export_df = pd.DataFrame(export_data)
                     csv = export_df.to_csv(index=False).encode('utf-8')
                     
-                    # Generate dynamic filename with current date
                     current_date = datetime.now().strftime("%Y-%m-%d")
                     filename = f"5aside_teams_{current_date}.csv"
                     
