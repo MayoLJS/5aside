@@ -1,6 +1,5 @@
 import pandas as pd
 import math
-import random
 from collections import defaultdict
 import streamlit as st
 
@@ -36,9 +35,8 @@ st.markdown("""
 ####################################################
 ######### FUNCTIONS
 ####################################################
-# Helper function to validate player input
 def parse_player_input(input_data):
-    """Parses input data into a list of (name, position) tuples."""
+    """Parses legacy text input data into a list of player dictionaries."""
     players = []
     errors = []
     lines = input_data.splitlines()
@@ -46,54 +44,72 @@ def parse_player_input(input_data):
         if not line.strip():
             continue # Skip empty lines
         parts = line.split('-')
-        if len(parts) == 2:
+        if len(parts) >= 2:
             name = parts[0].strip()
             position = parts[1].strip().upper()
+            skill = 3 # Default skill if not provided
+            
+            # Allow for optional skill metric in text upload (e.g. Tony - ATT - 5)
+            if len(parts) == 3:
+                try:
+                    skill = int(parts[2].strip())
+                except ValueError:
+                    pass
+            
             if position in ['ATT', 'MID', 'DEF']:
-                players.append((name, position))
+                players.append({"Name": name, "Position": position, "Skill": skill})
             else:
                 errors.append(f"Invalid position '{position}' for player '{name}'. Only 'ATT', 'MID', and 'DEF' are allowed.")
         else:
-            errors.append(f"Invalid format: '{line}'. Use 'Name - Position'.")
+            errors.append(f"Invalid format: '{line}'. Use 'Name - Position' or 'Name - Position - Skill'.")
     return players, errors
 
-# Function to create teams with balanced ratios
 def create_balanced_teams(players, num_teams):
-    """Creates balanced teams based on player positions."""
-    RATIO = {'ATT': 1, 'MID': 2, 'DEF': 2}  # Define position ratios
+    """Creates teams balanced by both Position and Skill Rating."""
+    RATIO = {'ATT': 1, 'MID': 2, 'DEF': 2}
     TOTAL_RATIO = sum(RATIO.values())
     MAX_TEAM_SIZE = 5
 
-    # Ensure there are enough players to form teams
-    position_counts = {pos: len([p for p in players if p[1] == pos]) for pos in RATIO}
     total_players = len(players)
-    
     min_teams = max(1, math.ceil(total_players / MAX_TEAM_SIZE))
     num_teams = min(num_teams, min_teams)
-
     team_size = total_players // num_teams
-    extra_players = total_players % num_teams
 
-    # Shuffle the players for random distribution
-    random.shuffle(players)
-
-    players_by_position = {pos: [p for p in players if p[1] == pos] for pos in RATIO}
-
+    # Sort all players by Skill (descending) to ensure highest rated get drafted first
+    players = sorted(players, key=lambda x: x['Skill'], reverse=True)
+    players_by_position = {pos: [p for p in players if p['Position'] == pos] for pos in RATIO}
+    
     teams = defaultdict(list)
-    for team_idx in range(1, num_teams + 1):
-        for pos, count in RATIO.items():
-            for _ in range(math.floor(count / TOTAL_RATIO * team_size)):
-                if players_by_position[pos]:
-                    teams[team_idx].append(players_by_position[pos].pop(0))
 
+    # Distribute based on ratio using a snake draft to balance talent
+    for pos, count in RATIO.items():
+        pos_players = players_by_position[pos]
+        needed_per_team = math.floor(count / TOTAL_RATIO * team_size)
+        
+        for _ in range(needed_per_team):
+            # Snake draft: forwards 1 to N, then backwards N to 1
+            for team_idx in range(1, num_teams + 1):
+                if pos_players:
+                    teams[team_idx].append(pos_players.pop(0))
+
+    # Collect remaining players who didn't fit the perfect mathematical ratio
     remaining_players = []
-    for pos, players_list in players_by_position.items():
-        remaining_players.extend(players_list)
+    for pos_players in players_by_position.values():
+        remaining_players.extend(pos_players)
 
-    # Distribute remaining players
-    for idx, player in enumerate(remaining_players):
-        team_idx = (idx % num_teams) + 1
+    # Distribute remaining players (snake draft by skill)
+    remaining_players = sorted(remaining_players, key=lambda x: x['Skill'], reverse=True)
+    team_idx = 1
+    direction = 1
+    for player in remaining_players:
         teams[team_idx].append(player)
+        team_idx += direction
+        if team_idx > num_teams:
+            team_idx = num_teams
+            direction = -1
+        elif team_idx < 1:
+            team_idx = 1
+            direction = 1
 
     return teams
 
@@ -104,16 +120,17 @@ with st.sidebar:
     st.title("⚽ 5-a-Side Settings")
     st.markdown("---")
     
-    # Safely load images with error handling in case files are missing
     try:
         st.image('./img/ballers.jpeg', width=150)
     except:
-        pass # Skip if image not found
+        pass
 
-    st.markdown("### 📋 Formatting Guide")
+    st.markdown("### 📋 Text Upload Guide")
     st.info("""
-    Use the format:  
-    `Name - Position`
+    If you are uploading a text file rather than using the interactive table, use the format:  
+    `Name - Position - Skill(1-5)`
+    
+    *Example:* `Tony - ATT - 5`
     
     **Accepted Positions:** 🏃‍♂️ **ATT** (Attacker)  
     🎯 **MID** (Midfielder)  
@@ -123,13 +140,13 @@ with st.sidebar:
     try:
         st.image('./img/Template.png', caption='Input Template', use_container_width=True)
     except:
-        pass # Skip if image not found
+        pass
 
 ####################################################
 ######### MAIN UI WORKSPACE
 ####################################################
 st.title("⚽ 5-a-Side Team Generator")
-st.markdown("Instantly build perfectly balanced soccer squads based on player positions.")
+st.markdown("Instantly build perfectly balanced soccer squads based on player positions and talent levels.")
 
 # --- INPUT SECTION (Card-Based Layout) ---
 with st.container(border=True):
@@ -137,31 +154,80 @@ with st.container(border=True):
     
     with col1:
         st.markdown("### 📝 Player Roster")
-        input_method = st.radio("Choose Input Method:", ["Manual Entry", "File Upload"], horizontal=True)
+        input_method = st.radio("Choose Input Method:", ["Interactive Table", "File Upload"], horizontal=True)
         
-        if input_method == "Manual Entry":
-            input_data = st.text_area("Enter your players below:", height=200, 
-                                      placeholder="Tony - ATT\nMayo - DEF\nSarah - MID")
+        if input_method == "Interactive Table":
+            st.caption("Click the '+' to add players. Select positions and rate skills from the dropdowns.")
+            
+            # Create a default starting grid
+            default_roster = pd.DataFrame([
+                {"Name": "Tony", "Position": "ATT", "Skill": 4},
+                {"Name": "Mayo", "Position": "DEF", "Skill": 5},
+                {"Name": "Sarah", "Position": "MID", "Skill": 3},
+                {"Name": "", "Position": None, "Skill": 3} 
+            ])
+            
+            # Render the interactive editor with column constraints
+            edited_df = st.data_editor(
+                default_roster,
+                num_rows="dynamic",
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    "Name": st.column_config.TextColumn(
+                        "Player Name", 
+                        required=True, 
+                        max_chars=50
+                    ),
+                    "Position": st.column_config.SelectboxColumn(
+                        "Position",
+                        options=["ATT", "MID", "DEF"],
+                        required=True
+                    ),
+                    "Skill": st.column_config.NumberColumn(
+                        "Skill Level (1-5)",
+                        min_value=1,
+                        max_value=5,
+                        required=True,
+                        format="%d ⭐"
+                    )
+                }
+            )
+            
+            # Extract valid players from the table
+            input_data = "" 
+            players = []
+            for _, row in edited_df.iterrows():
+                if pd.notna(row['Name']) and str(row['Name']).strip() != "" and pd.notna(row['Position']):
+                    players.append({
+                        "Name": str(row['Name']).strip(),
+                        "Position": str(row['Position']).strip(),
+                        "Skill": int(row['Skill']) if pd.notna(row['Skill']) else 3
+                    })
+            
+            errors = [] 
+            
         else:
             uploaded_file = st.file_uploader("Upload a text file (.txt)", type=["txt"])
             input_data = uploaded_file.getvalue().decode("utf-8") if uploaded_file else ""
+            
+            if input_data.strip():
+                players, errors = parse_player_input(input_data)
+            else:
+                players, errors = [], []
 
     with col2:
         st.markdown("### ⚙️ Constraints")
         num_teams = st.number_input("Number of Teams:", min_value=1, max_value=20, value=2, step=1)
         
-        st.markdown("<br>", unsafe_allow_html=True) # visual spacing spacer
-        
-        # Action button to trigger the algorithm
+        st.markdown("<br>", unsafe_allow_html=True)
         generate_btn = st.button("🚀 Generate Teams", type="primary", use_container_width=True)
 
 # --- PROCESSING & OUTPUT SECTION ---
 if generate_btn:
-    if not input_data.strip():
+    if not players and not input_data.strip():
         st.warning("⚠️ Please enter or upload some player data first.")
     else:
-        players, errors = parse_player_input(input_data)
-
         if errors:
             st.error("🚨 Found errors in your roster:")
             for error in errors:
@@ -174,31 +240,29 @@ if generate_btn:
                 # Run the backend logic
                 teams = create_balanced_teams(players, num_teams)
                 
-                # Render Teams in a Dynamic Grid
                 st.markdown("### 🏆 Your Balanced Squads")
                 
-                # Determine how many columns to use based on team count (max 3 wide)
+                # Determine columns based on team count (max 3 wide)
                 cols_per_row = min(len(teams), 3) 
                 grid_cols = st.columns(cols_per_row)
                 
                 for i, (team_idx, members) in enumerate(teams.items()):
-                    # Wrap each team in its own bordered card
                     target_col = grid_cols[i % cols_per_row]
                     
                     with target_col:
                         with st.container(border=True):
                             st.markdown(f"<h4 style='text-align: center;'>Team {team_idx}</h4>", unsafe_allow_html=True)
                             
-                            df = pd.DataFrame(members, columns=['Name', 'Position'])
+                            df = pd.DataFrame(members)
                             
-                            # Polished dataframe rendering
                             st.dataframe(
                                 df,
                                 use_container_width=True,
-                                hide_index=True, # Looks much cleaner without the row numbers
+                                hide_index=True,
                                 column_config={
                                     "Name": st.column_config.TextColumn("Player"),
-                                    "Position": st.column_config.TextColumn("Pos")
+                                    "Position": st.column_config.TextColumn("Pos"),
+                                    "Skill": st.column_config.NumberColumn("Skill", format="%d ⭐")
                                 }
                             )
             except Exception as e:
