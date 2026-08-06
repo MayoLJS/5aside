@@ -69,12 +69,12 @@ def create_balanced_teams(players, num_teams):
     """Creates teams balanced by both Position and Skill Rating."""
     RATIO = {'ATT': 1, 'MID': 2, 'DEF': 2}
     TOTAL_RATIO = sum(RATIO.values())
-    MAX_TEAM_SIZE = 5
 
     total_players = len(players)
     if num_teams < 1:
         num_teams = 1
     
+    # Team size logic (max 5 players mathematically guaranteed by UI validation)
     team_size = max(1, total_players // num_teams)
 
     # Sort all players by Skill ASCENDING (1 is Best, 4 is Worst)
@@ -190,12 +190,12 @@ Ezekiel - ATT - 4"""
 if 'roster' not in st.session_state:
     parsed_defaults, _ = parse_player_input(raw_default_roster)
     df = pd.DataFrame(parsed_defaults)
-    df["Remove ❌"] = False # Add the action column
+    df["Available ✅"] = True # Add the availability column (Default all to true on load)
     st.session_state.roster = df
 
 def clear_roster():
-    # Provide one empty row with the remove column when cleared
-    st.session_state.roster = pd.DataFrame([{"Name": "", "Position": None, "Skill": 3, "Remove ❌": False}])
+    # Provide one empty row with the availability column when cleared
+    st.session_state.roster = pd.DataFrame([{"Name": "", "Position": None, "Skill": 3, "Available ✅": True}])
 
 ####################################################
 ######### SIDEBAR & INSTRUCTIONS
@@ -212,13 +212,13 @@ with st.sidebar:
     st.markdown("### 🚀 Changelog & Evolution")
     st.info("""
     **Improvements made from the start:**
-    1. **SaaS Dashboard UI:** Overhauled the top-down script into a card-based layout with responsive grid outputs.
-    2. **Interactive Data Editor:** Replaced raw text boxes with a spreadsheet table featuring dropdowns for positions (`ATT`, `MID`, `DEF`).
-    3. **Skill-Weighted Balancing:** Integrated a snake-draft algorithm that matches a custom 1-4 rating system (`1 = Good, 4 = Ok`).
-    4. **Blind Output:** Player ratings are strictly used for calculations and safely hidden from the final visual outputs.
-    5. **Dynamic Roster:** 64-player custom roster added out of the box, with a fast global 'Clear All' button.
-    6. **Individual Deletion:** Added an interactive "Remove ❌" checkbox to instantly delete specific players.
-    7. **CSV Export:** Added a dynamic timestamped download button to save generated teams.
+    1. **SaaS Dashboard UI:** Overhauled the top-down script into a card-based layout with responsive grids.
+    2. **Interactive Data Editor:** Spreadsheet table featuring dropdowns for positions (`ATT`, `MID`, `DEF`).
+    3. **Skill-Weighted Balancing:** Snake-draft algorithm matching a custom rating system (`1 = Good, 4 = Ok`).
+    4. **Blind Output:** Player ratings are strictly used for calculations and safely hidden from final outputs.
+    5. **CSV Export:** Dynamic timestamped download button to save generated teams.
+    6. **Persistent Roster Database:** Players stay in the database! Simply toggle the `Available ✅` checkbox week-to-week to select who is playing.
+    7. **Strict Squad Limits:** Algorithm safely enforces a strict maximum of 5 players per team.
     """)
 
     st.markdown("### 📋 Text Upload Guide")
@@ -244,14 +244,14 @@ with st.container(border=True):
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.markdown("### 📝 Player Roster")
+        st.markdown("### 📝 Player Roster Database")
         input_method = st.radio("Choose Input Method:", ["Interactive Table", "File Upload"], horizontal=True, label_visibility="collapsed")
         
         if input_method == "Interactive Table":
             # Action Header for Table
             table_head_1, table_head_2 = st.columns([3, 1])
             with table_head_1:
-                st.caption("Pre-loaded with 64 players! Click '+' to add more or check 'Remove ❌' to delete an individual.")
+                st.caption("Check 'Available ✅' for players showing up this week. Click '+' to add permanent new players!")
             with table_head_2:
                 st.button("🗑️ Clear All", on_click=clear_roster, use_container_width=True)
             
@@ -260,26 +260,23 @@ with st.container(border=True):
                 num_rows="dynamic",
                 hide_index=True,
                 use_container_width=True,
-                height=350,
+                height=400,
                 column_config={
+                    "Available ✅": st.column_config.CheckboxColumn("Available ✅", default=True),
                     "Name": st.column_config.TextColumn("Player Name", required=True, max_chars=50),
                     "Position": st.column_config.SelectboxColumn("Position", options=["ATT", "MID", "DEF"], required=True),
-                    "Skill": st.column_config.NumberColumn("Rank (1=Good, 4=Ok)", min_value=1, max_value=4, required=True, format="%d"),
-                    "Remove ❌": st.column_config.CheckboxColumn("Remove ❌", default=False)
+                    "Skill": st.column_config.NumberColumn("Rank (1=Good, 4=Ok)", min_value=1, max_value=4, required=True, format="%d")
                 }
             )
             
-            # --- AUTO-DELETE LOGIC ---
-            # If any checkbox is ticked in the "Remove" column, filter them out and rerun
-            if edited_df["Remove ❌"].any():
-                st.session_state.roster = edited_df[edited_df["Remove ❌"] == False].reset_index(drop=True)
-                st.rerun()
+            # Sync user edits back to session state so they don't disappear on button click
+            st.session_state.roster = edited_df 
             
             input_data = "" 
             players = []
             for _, row in edited_df.iterrows():
-                # Ensure we skip removed rows just in case, and skip empty rows
-                if pd.notna(row['Name']) and str(row['Name']).strip() != "" and pd.notna(row['Position']) and not row.get('Remove ❌', False):
+                # ONLY grab players who are ticked as Available
+                if pd.notna(row['Name']) and str(row['Name']).strip() != "" and pd.notna(row['Position']) and row.get('Available ✅', False):
                     players.append({
                         "Name": str(row['Name']).strip(),
                         "Position": str(row['Position']).strip(),
@@ -304,17 +301,23 @@ with st.container(border=True):
         st.markdown("<br>", unsafe_allow_html=True)
         generate_btn = st.button("🚀 Generate Teams", type="primary", use_container_width=True)
 
+        st.info(f"**Max Capacity:** {num_teams * 5} Players\n\n*(5 players per team)*")
+
 # --- PROCESSING & OUTPUT SECTION ---
 if generate_btn:
     if not players and not input_data.strip():
-        st.warning("⚠️ Please enter or upload some player data first.")
+        st.warning("⚠️ Please select at least one available player.")
+    elif len(players) > (num_teams * 5):
+        # Strict 5-player constraint error block
+        excess = len(players) - (num_teams * 5)
+        st.error(f"🚨 **Too many players selected!**\n\nYou marked **{len(players)}** players as available, but **{num_teams}** teams can only hold a maximum of **{num_teams * 5}** players (5 per team). \n\n*Please increase your teams to at least {math.ceil(len(players)/5)} or uncheck {excess} players.*")
     else:
         if errors:
             st.error("🚨 Found errors in your roster:")
             for error in errors:
                 st.write(f"- {error}")
         else:
-            st.success(f"✅ Successfully loaded {len(players)} players!")
+            st.success(f"✅ Successfully loaded {len(players)} available players!")
             st.markdown("---")
             
             try:
@@ -334,10 +337,10 @@ if generate_btn:
                     with target_col:
                         with st.container(border=True):
                             st.markdown(f"<h4 style='text-align: center;'>Team {team_idx}</h4>", unsafe_allow_html=True)
-                            st.caption(f"👥 Players: {len(members)}")
+                            st.caption(f"👥 Players: {len(members)} / 5")
                             
                             # Create DataFrame and instantly drop the Skill column so it stays hidden
-                            df = pd.DataFrame(members)[['Name', 'Position']]
+                            df = pd.DataFrame(members)[['Name', 'Position']] if members else pd.DataFrame(columns=['Name', 'Position'])
                             
                             st.dataframe(
                                 df,
@@ -360,20 +363,21 @@ if generate_btn:
                 st.markdown("---")
                 
                 # --- SNAPSHOT / EXPORT BUTTON ---
-                export_df = pd.DataFrame(export_data)
-                csv = export_df.to_csv(index=False).encode('utf-8')
-                
-                # Generate dynamic filename with current date
-                current_date = datetime.now().strftime("%Y-%m-%d")
-                filename = f"5aside_teams_{current_date}.csv"
-                
-                st.download_button(
-                    label="📸 Download Squads (CSV)",
-                    data=csv,
-                    file_name=filename,
-                    mime="text/csv",
-                    type="primary"
-                )
+                if export_data:
+                    export_df = pd.DataFrame(export_data)
+                    csv = export_df.to_csv(index=False).encode('utf-8')
+                    
+                    # Generate dynamic filename with current date
+                    current_date = datetime.now().strftime("%Y-%m-%d")
+                    filename = f"5aside_teams_{current_date}.csv"
+                    
+                    st.download_button(
+                        label="📸 Download Squads (CSV)",
+                        data=csv,
+                        file_name=filename,
+                        mime="text/csv",
+                        type="primary"
+                    )
 
             except Exception as e:
                 st.error(f"An error occurred while generating teams: {e}")
