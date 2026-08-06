@@ -65,15 +65,16 @@ def parse_player_input(input_data):
     return players, errors
 
 def create_balanced_teams(players, num_teams):
-    """Creates teams balanced by both Position and Skill Rating."""
+    """Creates teams balanced by both Position and Skill Rating, ensuring equal average skill levels."""
     RATIO = {'ATT': 1, 'MID': 2, 'DEF': 2}
     TOTAL_RATIO = sum(RATIO.values())
     MAX_TEAM_SIZE = 5
 
     total_players = len(players)
-    min_teams = max(1, math.ceil(total_players / MAX_TEAM_SIZE))
-    num_teams = min(num_teams, min_teams)
-    team_size = total_players // num_teams
+    if num_teams < 1:
+        num_teams = 1
+    
+    team_size = max(1, total_players // num_teams)
 
     # Sort all players by Skill (descending) to ensure highest rated get drafted first
     players = sorted(players, key=lambda x: x['Skill'], reverse=True)
@@ -81,24 +82,27 @@ def create_balanced_teams(players, num_teams):
     
     teams = defaultdict(list)
 
-    # Distribute based on ratio using a snake draft to balance talent
+    # 1. Distribute based on position ratio using a snake draft partitioned by skill
     for pos, count in RATIO.items():
         pos_players = players_by_position[pos]
         needed_per_team = math.floor(count / TOTAL_RATIO * team_size)
         
         for _ in range(needed_per_team):
             # Snake draft: forwards 1 to N, then backwards N to 1
-            for team_idx in range(1, num_teams + 1):
+            team_order = list(range(1, num_teams + 1))
+            for team_idx in team_order:
                 if pos_players:
                     teams[team_idx].append(pos_players.pop(0))
 
-    # Collect remaining players who didn't fit the perfect mathematical ratio
+    # 2. Collect remaining players who didn't fit the exact mathematical ratio
     remaining_players = []
     for pos_players in players_by_position.values():
         remaining_players.extend(pos_players)
 
-    # Distribute remaining players (snake draft by skill)
+    # Sort remaining players globally by skill descending
     remaining_players = sorted(remaining_players, key=lambda x: x['Skill'], reverse=True)
+
+    # 3. Distribute remaining players via a continuous snake draft to tightly match team skill averages
     team_idx = 1
     direction = 1
     for player in remaining_players:
@@ -159,12 +163,18 @@ with st.container(border=True):
         if input_method == "Interactive Table":
             st.caption("Click the '+' to add players. Select positions and rate skills from the dropdowns.")
             
-            # Create a default starting grid
+            # Create a default starting grid with realistic test data
             default_roster = pd.DataFrame([
                 {"Name": "Tony", "Position": "ATT", "Skill": 4},
                 {"Name": "Mayo", "Position": "DEF", "Skill": 5},
                 {"Name": "Sarah", "Position": "MID", "Skill": 3},
-                {"Name": "", "Position": None, "Skill": 3} 
+                {"Name": "Alex", "Position": "ATT", "Skill": 3},
+                {"Name": "David", "Position": "MID", "Skill": 4},
+                {"Name": "John", "Position": "DEF", "Skill": 2},
+                {"Name": "Emma", "Position": "MID", "Skill": 5},
+                {"Name": "Chris", "Position": "ATT", "Skill": 2},
+                {"Name": "Luke", "Position": "DEF", "Skill": 4},
+                {"Name": "Sam", "Position": "MID", "Skill": 3}
             ])
             
             # Render the interactive editor with column constraints
@@ -249,9 +259,13 @@ if generate_btn:
                 for i, (team_idx, members) in enumerate(teams.items()):
                     target_col = grid_cols[i % cols_per_row]
                     
+                    # Compute team average skill level
+                    avg_skill = sum(m['Skill'] for m in members) / len(members) if members else 0
+                    
                     with target_col:
                         with st.container(border=True):
                             st.markdown(f"<h4 style='text-align: center;'>Team {team_idx}</h4>", unsafe_allow_html=True)
+                            st.caption(f"👥 Players: {len(members)} | ⭐ Avg Skill: {avg_skill:.2f} / 5.0")
                             
                             df = pd.DataFrame(members)
                             
