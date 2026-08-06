@@ -64,54 +64,61 @@ def parse_player_input(input_data):
             errors.append(f"Invalid format: '{line}'. Use 'Name - Position' or 'Name - Position - Skill'.")
     return players, errors
 
-def create_balanced_teams(players, num_teams):
-    """Creates teams balanced by both Position and Skill Rating."""
-    RATIO = {'ATT': 1, 'MID': 2, 'DEF': 2}
-    TOTAL_RATIO = sum(RATIO.values())
-
+def create_balanced_teams(players):
+    """Creates teams strictly capped at 5 players, forming an incomplete team with extras."""
+    MAX_TEAM_SIZE = 5
     total_players = len(players)
-    if num_teams < 1:
-        num_teams = 1
     
-    team_size = max(1, total_players // num_teams)
-
     # Sort all players by Skill ASCENDING (1 is Best, 4 is Worst)
     players = sorted(players, key=lambda x: x['Skill'], reverse=False)
-    players_by_position = {pos: [p for p in players if p['Position'] == pos] for pos in RATIO}
     
+    # Group by position
+    players_by_position = {
+        'ATT': [p for p in players if p['Position'] == 'ATT'],
+        'MID': [p for p in players if p['Position'] == 'MID'],
+        'DEF': [p for p in players if p['Position'] == 'DEF']
+    }
+    
+    # Calculate capacities per team
+    num_full_teams = total_players // MAX_TEAM_SIZE
+    remainder = total_players % MAX_TEAM_SIZE
+    
+    team_capacities = {i: MAX_TEAM_SIZE for i in range(1, num_full_teams + 1)}
+    if remainder > 0:
+        team_capacities[num_full_teams + 1] = remainder
+        
+    num_teams = len(team_capacities)
     teams = defaultdict(list)
 
-    # 1. Distribute based on position ratio using a snake draft
-    for pos, count in RATIO.items():
-        pos_players = players_by_position[pos]
-        needed_per_team = math.floor(count / TOTAL_RATIO * team_size)
-        
-        for _ in range(needed_per_team):
-            team_order = list(range(1, num_teams + 1))
-            for team_idx in team_order:
-                if pos_players:
-                    teams[team_idx].append(pos_players.pop(0))
-
-    # 2. Collect remaining players 
-    remaining_players = []
-    for pos_players in players_by_position.values():
-        remaining_players.extend(pos_players)
-
-    # Sort remaining players globally by skill ascending
-    remaining_players = sorted(remaining_players, key=lambda x: x['Skill'], reverse=False)
-
-    # 3. Distribute remaining players via continuous snake draft
     team_idx = 1
     direction = 1
-    for player in remaining_players:
-        teams[team_idx].append(player)
-        team_idx += direction
-        if team_idx > num_teams:
-            team_idx = num_teams
-            direction = -1
-        elif team_idx < 1:
-            team_idx = 1
-            direction = 1
+    
+    # Continuous Snake Draft across all positions
+    for pos in ['ATT', 'MID', 'DEF']:
+        pos_players = players_by_position[pos]
+        while pos_players:
+            # Skip any teams that have already reached their capacity
+            while len(teams[team_idx]) >= team_capacities[team_idx]:
+                team_idx += direction
+                # Handle bouncing at the ends of the snake
+                if team_idx > num_teams:
+                    team_idx = num_teams
+                    direction = -1
+                elif team_idx < 1:
+                    team_idx = 1
+                    direction = 1
+                    
+            # Assign the best available player for this position
+            teams[team_idx].append(pos_players.pop(0))
+            
+            # Advance to the next team
+            team_idx += direction
+            if team_idx > num_teams:
+                team_idx = num_teams
+                direction = -1
+            elif team_idx < 1:
+                team_idx = 1
+                direction = 1
 
     return teams
 
@@ -212,11 +219,11 @@ with st.sidebar:
     st.info("""
     **Improvements made from the start:**
     1. **SaaS Dashboard UI:** Responsive card layouts.
-    2. **Skill-Weighted Balancing:** 1-4 custom ranking draft.
-    3. **Blind Output:** Player ratings hidden from generated cards.
-    4. **Persistent Roster:** All players default to unticked. 
-    5. **No Table Jumping:** Fixed the UI bug so you can rapid-click checkboxes without the table refreshing or losing your scroll position!
-    6. **Dynamic Team Sizing:** Automatically recommends number of teams based on available players.
+    2. **Persistent Database:** 64-player roster defaults to unticked. 
+    3. **No Table Jumping:** Fixed the UI bug so you can rapid-click checkboxes.
+    4. **Strict 5-Player Cap:** Teams are now mathematically hard-capped at 5 players.
+    5. **Auto-Waitlisting:** Any extra selected players automatically spill over into a new, balanced incomplete team.
+    6. **Skill-Weighted Balancing:** 1-4 custom rating snake draft.
     7. **Mobile Sequential Stacking:** UI perfectly stacks teams in order 1,2,3,4 on phones.
     8. **CSV Export:** Download timestamped results instantly.
     """)
@@ -242,14 +249,13 @@ with st.container(border=True):
             with table_head_2:
                 st.button("🗑️ Clear All", on_click=clear_roster, use_container_width=True)
             
-            # Key fix: Adding key="roster_editor" and stopping the forced session overwrite stops the jumping!
             edited_df = st.data_editor(
                 st.session_state.roster,
                 key="roster_editor",
                 num_rows="dynamic",
                 hide_index=True,
                 use_container_width=True,
-                height=500, # slightly taller to prevent scrollbar jumping
+                height=500,
                 column_config={
                     "Available ✅": st.column_config.CheckboxColumn("Available ✅", default=False),
                     "Name": st.column_config.TextColumn("Player Name", required=True, max_chars=50),
@@ -281,21 +287,22 @@ with st.container(border=True):
 
     with col2:
         st.markdown("### ⚙️ Constraints")
+        st.info("Teams are **strictly capped at 5 players**. Any extra players automatically form a balanced incomplete team.")
         
-        # --- DYNAMIC TEAM CALCULATION ---
         num_players = len(players)
-        optimal_teams = max(2, num_players // 5) if num_players >= 8 else (1 if num_players > 0 else 2)
-        
-        num_teams = st.number_input("Number of Teams:", min_value=1, max_value=20, value=optimal_teams, step=1)
-        
+        if num_players > 0:
+            full_teams = num_players // 5
+            remainder = num_players % 5
+            
+            st.metric("Total Players Selected", num_players)
+            st.write(f"✅ **{full_teams}** Full Teams")
+            if remainder > 0:
+                st.write(f"⏳ **1** Incomplete Team ({remainder}/5)")
+        else:
+            st.caption("Tick players in the roster to see team projections.")
+            
         st.markdown("<br>", unsafe_allow_html=True)
         generate_btn = st.button("🚀 Generate Teams", type="primary", use_container_width=True)
-
-        if num_teams > 0 and num_players > 0:
-            avg_size = num_players / num_teams
-            st.info(f"**Selected Players:** {num_players}\n\n**Est. Team Size:** ~{math.floor(avg_size)} to {math.ceil(avg_size)} players per squad.")
-        elif num_players == 0:
-            st.info("Tick players in the roster to see team projections.")
 
 # --- PROCESSING & OUTPUT SECTION ---
 if generate_btn:
@@ -311,7 +318,8 @@ if generate_btn:
             st.markdown("---")
             
             try:
-                teams = create_balanced_teams(players, num_teams)
+                # Backend logic no longer needs num_teams passed manually!
+                teams = create_balanced_teams(players)
                 
                 st.markdown("### 🏆 Your Balanced Squads")
                 
@@ -329,7 +337,10 @@ if generate_btn:
                         with col:
                             with st.container(border=True):
                                 st.markdown(f"<h4 style='text-align: center;'>Team {team_idx}</h4>", unsafe_allow_html=True)
-                                st.caption(f"👥 Players: {len(members)}")
+                                
+                                # Dynamic tag for incomplete teams
+                                tag = " ⚠️ (Incomplete)" if len(members) < 5 else ""
+                                st.caption(f"👥 Players: {len(members)} / 5{tag}")
                                 
                                 df = pd.DataFrame(members)[['Name', 'Position']] if members else pd.DataFrame(columns=['Name', 'Position'])
                                 
