@@ -187,13 +187,14 @@ Ezekiel - ATT - 4"""
 if 'roster' not in st.session_state:
     parsed_defaults, _ = parse_player_input(raw_default_roster)
     df = pd.DataFrame(parsed_defaults)
-    # Default is now False (Unticked)
     df["Available ✅"] = False 
     st.session_state.roster = df
 
 def clear_roster():
-    # Provide one empty row with the availability column when cleared (Unticked)
+    # Provide one empty row when cleared and safely delete the editor's memory key
     st.session_state.roster = pd.DataFrame([{"Name": "", "Position": None, "Skill": 3, "Available ✅": False}])
+    if 'roster_editor' in st.session_state:
+        del st.session_state['roster_editor']
 
 ####################################################
 ######### SIDEBAR & INSTRUCTIONS
@@ -211,11 +212,11 @@ with st.sidebar:
     st.info("""
     **Improvements made from the start:**
     1. **SaaS Dashboard UI:** Responsive card layouts.
-    2. **Interactive Editor:** Pre-loaded 64 player database. 
-    3. **Skill-Weighted Balancing:** 1-4 custom ranking draft.
-    4. **Blind Output:** Player ratings hidden from generated cards.
-    5. **Persistent Roster:** All players default to unticked. Toggle `Available ✅` week-to-week to build your squad!
-    6. **Dynamic Team Sizing:** Automatically recommends number of teams based on available players (allows >5 per team for subs!).
+    2. **Skill-Weighted Balancing:** 1-4 custom ranking draft.
+    3. **Blind Output:** Player ratings hidden from generated cards.
+    4. **Persistent Roster:** All players default to unticked. 
+    5. **No Table Jumping:** Fixed the UI bug so you can rapid-click checkboxes without the table refreshing or losing your scroll position!
+    6. **Dynamic Team Sizing:** Automatically recommends number of teams based on available players.
     7. **Mobile Sequential Stacking:** UI perfectly stacks teams in order 1,2,3,4 on phones.
     8. **CSV Export:** Download timestamped results instantly.
     """)
@@ -241,22 +242,21 @@ with st.container(border=True):
             with table_head_2:
                 st.button("🗑️ Clear All", on_click=clear_roster, use_container_width=True)
             
+            # Key fix: Adding key="roster_editor" and stopping the forced session overwrite stops the jumping!
             edited_df = st.data_editor(
                 st.session_state.roster,
+                key="roster_editor",
                 num_rows="dynamic",
                 hide_index=True,
                 use_container_width=True,
-                height=400,
+                height=500, # slightly taller to prevent scrollbar jumping
                 column_config={
-                    # Checkbox defaults to False for new rows
                     "Available ✅": st.column_config.CheckboxColumn("Available ✅", default=False),
                     "Name": st.column_config.TextColumn("Player Name", required=True, max_chars=50),
                     "Position": st.column_config.SelectboxColumn("Position", options=["ATT", "MID", "DEF"], required=True),
                     "Skill": st.column_config.NumberColumn("Rank (1=Good, 4=Ok)", min_value=1, max_value=4, required=True, format="%d")
                 }
             )
-            
-            st.session_state.roster = edited_df 
             
             input_data = "" 
             players = []
@@ -283,7 +283,6 @@ with st.container(border=True):
         st.markdown("### ⚙️ Constraints")
         
         # --- DYNAMIC TEAM CALCULATION ---
-        # Calculate optimal teams (Floor of players / 5). Minimum of 2 teams if people are playing.
         num_players = len(players)
         optimal_teams = max(2, num_players // 5) if num_players >= 8 else (1 if num_players > 0 else 2)
         
@@ -292,7 +291,6 @@ with st.container(border=True):
         st.markdown("<br>", unsafe_allow_html=True)
         generate_btn = st.button("🚀 Generate Teams", type="primary", use_container_width=True)
 
-        # Show projection info based on the dynamic calculation
         if num_teams > 0 and num_players > 0:
             avg_size = num_players / num_teams
             st.info(f"**Selected Players:** {num_players}\n\n**Est. Team Size:** ~{math.floor(avg_size)} to {math.ceil(avg_size)} players per squad.")
