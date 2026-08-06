@@ -5,19 +5,33 @@ from collections import defaultdict
 import streamlit as st
 
 ####################################################
-######### SETUP
+######### SETUP & PAGE CONFIG
 ####################################################
 st.set_page_config(
     page_title='5aside Soccer',
     page_icon='⚽',
     layout='wide',
+    initial_sidebar_state="expanded"
 )
 
-# Add logo (ensure the image exists in the directory or provide a valid path)
-st.image('./img/ballers.jpeg', width=200)
-
-# Display template image for guidance
-st.image('./img/Template.png', caption='Use this template as a guide', width=200)
+# Custom CSS for UI Polish (Light/Dark Mode Compatible)
+st.markdown("""
+<style>
+    /* Add subtle styling to the primary button */
+    div.stButton > button:first-child {
+        font-weight: 600;
+        font-size: 1.1rem;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+    }
+    
+    /* Clean up the dataframe headers */
+    [data-testid="stDataFrame"] {
+        border-radius: 8px;
+        overflow: hidden;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 ####################################################
 ######### FUNCTIONS
@@ -29,6 +43,8 @@ def parse_player_input(input_data):
     errors = []
     lines = input_data.splitlines()
     for line in lines:
+        if not line.strip():
+            continue # Skip empty lines
         parts = line.split('-')
         if len(parts) == 2:
             name = parts[0].strip()
@@ -82,50 +98,108 @@ def create_balanced_teams(players, num_teams):
     return teams
 
 ####################################################
-######### STREAMLIT APP
+######### SIDEBAR & INSTRUCTIONS
 ####################################################
-st.title("Five Aside Soccer ⚽")
-st.write("You can **paste** or **upload a file** with player names and positions in the format `Name - Position` (e.g., `Tony - ATT`, `Mayo - DEF`).")
+with st.sidebar:
+    st.title("⚽ 5-a-Side Settings")
+    st.markdown("---")
+    
+    # Safely load images with error handling in case files are missing
+    try:
+        st.image('./img/ballers.jpeg', width=150)
+    except:
+        pass # Skip if image not found
 
-# Create two columns for input fields
-col1, col2 = st.columns(2)
+    st.markdown("### 📋 Formatting Guide")
+    st.info("""
+    Use the format:  
+    `Name - Position`
+    
+    **Accepted Positions:** 🏃‍♂️ **ATT** (Attacker)  
+    🎯 **MID** (Midfielder)  
+    🛡️ **DEF** (Defender)
+    """)
+    
+    try:
+        st.image('./img/Template.png', caption='Input Template', use_container_width=True)
+    except:
+        pass # Skip if image not found
 
-# Input for player data
-with col1:
-    input_method = st.radio("Input method:", ["Manual", "File Upload"])
-    if input_method == "Manual":
-        input_data = st.text_area("Enter player data (e.g., `Tony - ATT`):")
-    else:
-        uploaded_file = st.file_uploader("Upload a file containing player data:", type=["txt"])
-        if uploaded_file is not None:
-            input_data = uploaded_file.getvalue().decode("utf-8")
+####################################################
+######### MAIN UI WORKSPACE
+####################################################
+st.title("⚽ 5-a-Side Team Generator")
+st.markdown("Instantly build perfectly balanced soccer squads based on player positions.")
+
+# --- INPUT SECTION (Card-Based Layout) ---
+with st.container(border=True):
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("### 📝 Player Roster")
+        input_method = st.radio("Choose Input Method:", ["Manual Entry", "File Upload"], horizontal=True)
+        
+        if input_method == "Manual Entry":
+            input_data = st.text_area("Enter your players below:", height=200, 
+                                      placeholder="Tony - ATT\nMayo - DEF\nSarah - MID")
         else:
-            input_data = ""
+            uploaded_file = st.file_uploader("Upload a text file (.txt)", type=["txt"])
+            input_data = uploaded_file.getvalue().decode("utf-8") if uploaded_file else ""
 
-# Input for number of teams
-with col2:
-    num_teams = st.number_input("Enter the number of teams you want to create:", min_value=1, step=1)
+    with col2:
+        st.markdown("### ⚙️ Constraints")
+        num_teams = st.number_input("Number of Teams:", min_value=1, max_value=20, value=2, step=1)
+        
+        st.markdown("<br>", unsafe_allow_html=True) # visual spacing spacer
+        
+        # Action button to trigger the algorithm
+        generate_btn = st.button("🚀 Generate Teams", type="primary", use_container_width=True)
 
-if input_data:
-    # Parse player input
-    players, errors = parse_player_input(input_data)
-
-    # Display current count of valid players
-    st.write(f"**Number of players added:** {len(players)}")
-
-    # Display errors if any
-    if errors:
-        for error in errors:
-            st.warning(error)
+# --- PROCESSING & OUTPUT SECTION ---
+if generate_btn:
+    if not input_data.strip():
+        st.warning("⚠️ Please enter or upload some player data first.")
     else:
-        try:
-            # Create teams
-            teams = create_balanced_teams(players, num_teams)
+        players, errors = parse_player_input(input_data)
 
-            # Display teams
-            for team_idx, members in teams.items():
-                st.subheader(f"Team {team_idx}")
-                df = pd.DataFrame(members, columns=['Name', 'Position'])
-                st.dataframe(df, use_container_width=True)
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
+        if errors:
+            st.error("🚨 Found errors in your roster:")
+            for error in errors:
+                st.write(f"- {error}")
+        else:
+            st.success(f"✅ Successfully loaded {len(players)} players!")
+            st.markdown("---")
+            
+            try:
+                # Run the backend logic
+                teams = create_balanced_teams(players, num_teams)
+                
+                # Render Teams in a Dynamic Grid
+                st.markdown("### 🏆 Your Balanced Squads")
+                
+                # Determine how many columns to use based on team count (max 3 wide)
+                cols_per_row = min(len(teams), 3) 
+                grid_cols = st.columns(cols_per_row)
+                
+                for i, (team_idx, members) in enumerate(teams.items()):
+                    # Wrap each team in its own bordered card
+                    target_col = grid_cols[i % cols_per_row]
+                    
+                    with target_col:
+                        with st.container(border=True):
+                            st.markdown(f"<h4 style='text-align: center;'>Team {team_idx}</h4>", unsafe_allow_html=True)
+                            
+                            df = pd.DataFrame(members, columns=['Name', 'Position'])
+                            
+                            # Polished dataframe rendering
+                            st.dataframe(
+                                df,
+                                use_container_width=True,
+                                hide_index=True, # Looks much cleaner without the row numbers
+                                column_config={
+                                    "Name": st.column_config.TextColumn("Player"),
+                                    "Position": st.column_config.TextColumn("Pos")
+                                }
+                            )
+            except Exception as e:
+                st.error(f"An error occurred while generating teams: {e}")
