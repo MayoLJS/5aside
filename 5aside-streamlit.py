@@ -70,7 +70,7 @@ def create_balanced_teams(players):
     MAX_TEAM_SIZE = 5
     total_players = len(players)
     
-    # --- THE RANDOMNESS FIX ---
+    # --- DEEP RANDOMIZATION FIX ---
     # 1. Shuffle all players first to ensure variety within the same skill brackets
     random.shuffle(players)
     
@@ -96,15 +96,21 @@ def create_balanced_teams(players):
     num_teams = len(team_capacities)
     teams = defaultdict(list)
 
-    team_idx = 1
-    direction = 1
+    # 3. Randomize Draft Direction (Coin flip to start at Team 1 or Team N)
+    direction = random.choice([1, -1])
+    team_idx = 1 if direction == 1 else num_teams
     
-    # Continuous Snake Draft across all positions
-    for pos in ['ATT', 'MID', 'DEF']:
+    # 4. Randomize Position Order (Breaks up deterministic combinations like Best ATT always playing with Best MID)
+    positions = ['ATT', 'MID', 'DEF']
+    random.shuffle(positions)
+    
+    # Continuous Snake Draft across all randomized positions
+    for pos in positions:
         pos_players = players_by_position[pos]
         while pos_players:
             # Skip any teams that have already reached their capacity
-            while len(teams[team_idx]) >= team_capacities[team_idx]:
+            attempts = 0
+            while len(teams[team_idx]) >= team_capacities[team_idx] and attempts < num_teams:
                 team_idx += direction
                 # Handle bouncing at the ends of the snake
                 if team_idx > num_teams:
@@ -113,9 +119,11 @@ def create_balanced_teams(players):
                 elif team_idx < 1:
                     team_idx = 1
                     direction = 1
-                    
+                attempts += 1
+                
             # Assign the best available player for this position
-            teams[team_idx].append(pos_players.pop(0))
+            if len(teams[team_idx]) < team_capacities[team_idx]:
+                teams[team_idx].append(pos_players.pop(0))
             
             # Advance to the next team
             team_idx += direction
@@ -125,6 +133,13 @@ def create_balanced_teams(players):
             elif team_idx < 1:
                 team_idx = 1
                 direction = 1
+
+    # 5. Final Squad Shuffle: Mix up the completed full teams so Team 1 isn't consistently structural
+    if num_full_teams > 1:
+        full_squads = [teams[i] for i in range(1, num_full_teams + 1)]
+        random.shuffle(full_squads)
+        for i in range(1, num_full_teams + 1):
+            teams[i] = full_squads[i-1]
 
     return teams
 
@@ -229,8 +244,8 @@ with st.sidebar:
     **Improvements made from the start:**
     1. **SaaS Dashboard UI:** Responsive card layouts.
     2. **Persistent Database:** 64-player roster defaults to unticked. 
-    3. **Left-Aligned Ticks:** Checkboxes on the far left for easy mobile scanning.
-    4. **Stable Randomization:** Snake draft perfectly balances skills while giving you fresh team combos every click!
+    3. **Deep Randomization:** Added positional shuffling, coin-flip draft directions, and final squad mix-ups so you get fresh, unique team combos every single click!
+    4. **Left-Aligned Ticks:** Checkboxes on the far left for easy mobile scanning.
     5. **Strict 5-Player Cap:** Teams are mathematically hard-capped at 5 players.
     6. **Auto-Waitlisting:** Extra players spill over into a new, balanced incomplete team.
     7. **CSV Export:** Download timestamped results instantly.
