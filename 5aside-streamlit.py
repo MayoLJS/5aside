@@ -209,6 +209,8 @@ Nonso - DEF - 1
 Halim - DEF - 2
 Emy - DEF - 1
 Vini - ATT - 3
+Emmzy - ATT - 3
+Tochukwu - MID - 2
 Ezekiel - ATT - 4"""
 
 # Initialize session state so we can clear/refresh it dynamically
