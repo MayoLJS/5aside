@@ -211,6 +211,8 @@ Emy - DEF - 1
 Vini - ATT - 3
 Emmzy - ATT - 3
 Tochukwu - MID - 2
+Amir - MID - 3
+Michael Smith - ATT - 3
 Ezekiel - ATT - 4"""
 
 # Initialize session state so we can clear/refresh it dynamically
