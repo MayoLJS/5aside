@@ -205,6 +205,8 @@ Azodo - DEF - 2
 Omar - MID - 1
 KDB - DEF - 2
 Ay - MID - 1
+Habib - DEF - 2
+Mr Karl - DEF - 4
 Nonso - DEF - 1
 Halim - DEF - 2
 Emy - DEF - 1
